@@ -30,7 +30,30 @@ async function run() {
 
         const db = client.db("samShiftDB"); // database name
         const parcelCollection = db.collection("parcels"); //collection
-        // ✅ CREATE PARCEL (POST)
+
+        // parcels api
+        // GET: All parcels or  parcels by user (created_by), sorted by latest 
+        app.get("/parcels", async (req, res) => {
+            try {
+                const userEmail = req.query.email;
+
+                // 🔍 If email exists → filter, else → get all
+                const query = userEmail ? { created_by: userEmail } : {};
+                const options = {
+                    sort: { creation_date: -1 }, // newest first
+                };
+
+                const parcels = await parcelCollection
+                    .find(query, options)
+                    .toArray();
+                res.send(parcels);
+            } catch (error) {
+                console.error('error fetching parcels:', error);
+                res.status(500).send({ message: "Failed to fetch parcels" });
+            }
+        });
+
+        //POST:  CREATE a new  PARCEL (POST)
         app.post("/parcels", async (req, res) => {
             const parcel = req.body;
 
@@ -47,7 +70,7 @@ async function run() {
             });
         });
 
-        // ✅ GET ALL PARCELS
+        // GET ALL PARCELS
         app.get("/parcels", async (req, res) => {
             const result = await parcelCollection.find().toArray();
             res.send(result);
@@ -70,10 +93,6 @@ app.get("/", (req, res) => {
     res.send("🚀 SamShift Server is Running...");
 });
 
-// ✅ SAMPLE ROUTE (parcel)
-app.get("/parcels", (req, res) => {
-    res.send([]);
-});
 
 // ✅ START SERVER
 app.listen(port, () => {
