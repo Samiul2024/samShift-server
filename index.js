@@ -6,7 +6,7 @@ const { MongoClient, ServerApiVersion } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 5000;
 
-// ✅ MIDDLEWARE
+//  MIDDLEWARE
 app.use(cors());
 app.use(express.json());
 
@@ -50,6 +50,29 @@ async function run() {
             } catch (error) {
                 console.error('error fetching parcels:', error);
                 res.status(500).send({ message: "Failed to fetch parcels" });
+            }
+        });
+
+
+        app.get('/parcels/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+
+                const parcel = await parcelCollection.findOne({
+                    _id: new ObjectId(id)
+                });
+
+                if (!parcel) {
+                    return res.status(404).send({
+                        message: "Parcel not found"
+                    });
+
+                }
+                res.send(parcel);
+            } catch (error) {
+                console.error('Error fetching parcel:', error);
+                res.status(500).send({ message: 'failed to fetch parcel' });
+
             }
         });
 
@@ -120,13 +143,13 @@ run().catch(console.dir);
 
 
 
-// ✅ TEST ROUTE
+//  TEST ROUTE
 app.get("/", (req, res) => {
     res.send("🚀 SamShift Server is Running...");
 });
 
 
-// ✅ START SERVER
+//  START SERVER
 app.listen(port, () => {
     console.log(`✅ Server running on port ${port}`);
 });
