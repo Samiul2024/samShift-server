@@ -3,6 +3,9 @@ const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
+const stripe = require("stripe")("sk_test_your_key");
+
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -130,6 +133,23 @@ async function run() {
                 });
             }
         });
+
+
+        app.post("/create-payment-intent", async (req, res) => {
+            try {
+                const paymentIntent = await stripe.paymentIntent.create({
+                    amount: 1000, // Amount in cents
+                    currency: 'usd',
+                    payment_method_types: ["card"],
+                });
+
+                res.json({ clientSecret: paymentIntent.client_secret });
+            } catch (error) {
+                res.status(500).send({ error: error.message });
+            }
+        });
+
+
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
