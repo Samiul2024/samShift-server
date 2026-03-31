@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
-const stripe = require("stripe")("sk_test_your_key");
+const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_KEY);
 
 
 const app = express();
@@ -135,17 +135,19 @@ async function run() {
         });
 
 
-        app.post("/create-payment-intent", async (req, res) => {
+        app.post('/create-payment-intent', async (req, res) => {
+            const amountInCents = req.body.amountInCents
+
             try {
-                const paymentIntent = await stripe.paymentIntent.create({
-                    amount: 1000, // Amount in cents
+                const paymentIntent = await stripe.paymentIntents.create({
+                    amount: amountInCents, // Amount in cents
                     currency: 'usd',
                     payment_method_types: ["card"],
                 });
 
                 res.json({ clientSecret: paymentIntent.client_secret });
             } catch (error) {
-                res.status(500).send({ error: error.message });
+                res.status(500).json({ error: error.message });
             }
         });
 
