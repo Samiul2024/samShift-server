@@ -33,7 +33,7 @@ async function run() {
 
         const db = client.db("samShiftDB"); // database name
         const parcelCollection = db.collection("parcels"); //collection
-
+        const paymentsCollection = db.collection('payments');
         // parcels api
         // GET: All parcels or  parcels by user (created_by), sorted by latest 
         app.get("/parcels", async (req, res) => {
@@ -133,6 +133,88 @@ async function run() {
                 });
             }
         });
+
+
+        app.get("/payments", async (req, res) => {
+            try {
+                const email = req.query.email;
+
+                const query = email ? { email } : {};
+
+                const payments = await paymentsCollection
+                    .find(query)
+                    .sort({ paid_at: -1 }) // latest first
+                    .toArray();
+
+                res.send(payments);
+
+            } catch (error) {
+                console.error("Fetch payments error:", error);
+                res.status(500).send({
+                    message: "Failed to fetch payments",
+                });
+            }
+        });
+
+
+        //POST : Record Payment and update parcel status
+        app.post("/payments", async (req, res) => {
+            try {
+                const paymentData = req.body;
+
+                const {
+                    parcelId,
+                    email,
+                    amount,
+                    paymentMethod,
+                    transactionId,
+                } = paymentData;
+
+                // 🔴 1. Update parcel payment_status
+                const updateResult = await parcelCollection.updateOne(
+                    { _id: new ObjectId(parcelId) },
+                    {
+                        $set: {
+                            payment_status: "paid",
+                            transaction_id: transactionId,
+                        },
+                    }
+                );
+
+
+                if (updateResult.modifiedCount === 0) {
+                    return res.status(404).send({ message: 'Parcel not found or already paid' });
+                }
+
+                // 🔴 2. Save payment history
+                const paymentDoc = {
+                    parcelId,
+                    email,
+                    amount,
+                    paymentMethod,
+                    transactionId,
+                    paid_at_string: new Date().toISOString(),
+                    paid_at: new Date(),
+                };
+
+                const insertResult = await paymentsCollection.insertOne(paymentDoc);
+
+                res.send({
+                    success: true,
+                    message: "Payment recorded & parcel updated",
+                    insertedId: insertResult.insertedId,
+                    updatedParcel: updateResult.modifiedCount,
+                });
+
+            } catch (error) {
+                console.error("Payment error:", error);
+                res.status(500).send({
+                    success: false,
+                    message: "Failed to process payment",
+                });
+            }
+        });
+
 
 
         app.post('/create-payment-intent', async (req, res) => {
