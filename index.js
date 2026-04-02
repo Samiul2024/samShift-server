@@ -34,6 +34,7 @@ async function run() {
         const db = client.db("samShiftDB"); // database name
         const parcelCollection = db.collection("parcels"); //collection
         const paymentsCollection = db.collection('payments');
+        const trackingCollection = db.collection('tracking');
         // parcels api
         // GET: All parcels or  parcels by user (created_by), sorted by latest 
         app.get("/parcels", async (req, res) => {
@@ -135,6 +136,56 @@ async function run() {
         });
 
 
+        // tracking
+        app.post("/tracking", async (req, res) => {
+            try {
+                const trackingData = req.body;
+
+                const result = await trackingCollection.insertOne({
+                    ...trackingData,
+                    created_at: new Date(),
+                });
+
+                res.send({
+                    success: true,
+                    message: "Tracking updated",
+                    insertedId: result.insertedId,
+                });
+
+            } catch (error) {
+                console.error("Tracking error:", error);
+                res.status(500).send({
+                    message: "Failed to add tracking update",
+                });
+            }
+        });
+
+
+        // api to get tracking history
+
+        app.get("/tracking/:tracking_id", async (req, res) => {
+            try {
+                const tracking_id = req.params.tracking_id;
+
+                const updates = await trackingCollection
+                    .find({ tracking_id })
+                    .sort({ created_at: -1 }) // latest first
+                    .toArray();
+
+                res.send(updates);
+
+            } catch (error) {
+                console.error("Fetch tracking error:", error);
+                res.status(500).send({
+                    message: "Failed to fetch tracking",
+                });
+            }
+        });
+
+
+        //payments
+
+
         app.get("/payments", async (req, res) => {
             try {
                 const email = req.query.email;
@@ -158,6 +209,7 @@ async function run() {
 
 
         //POST : Record Payment and update parcel status
+        // POST : Record Payment + Update Parcel + Add Tracking
         app.post("/payments", async (req, res) => {
             try {
                 const paymentData = req.body;
@@ -168,9 +220,10 @@ async function run() {
                     amount,
                     paymentMethod,
                     transactionId,
+                    tracking_id, // 🔥 IMPORTANT
                 } = paymentData;
 
-                // 🔴 1. Update parcel payment_status
+                // 1️⃣ Update parcel
                 const updateResult = await parcelCollection.updateOne(
                     { _id: new ObjectId(parcelId) },
                     {
@@ -181,29 +234,39 @@ async function run() {
                     }
                 );
 
-
                 if (updateResult.modifiedCount === 0) {
-                    return res.status(404).send({ message: 'Parcel not found or already paid' });
+                    return res.status(404).send({
+                        message: "Parcel not found or already paid",
+                    });
                 }
 
-                // 🔴 2. Save payment history
+                // 2️⃣ Save payment history
                 const paymentDoc = {
                     parcelId,
                     email,
                     amount,
                     paymentMethod,
                     transactionId,
+                    tracking_id,
                     paid_at_string: new Date().toISOString(),
                     paid_at: new Date(),
                 };
 
                 const insertResult = await paymentsCollection.insertOne(paymentDoc);
 
+                // 3️⃣ 🔥 INSERT INITIAL TRACKING
+                await trackingCollection.insertOne({
+                    tracking_id,
+                    status: "Parcel Confirmed",
+                    message: "Your parcel has been confirmed after payment",
+                    location: "Origin Center",
+                    created_at: new Date(),
+                });
+
                 res.send({
                     success: true,
-                    message: "Payment recorded & parcel updated",
+                    message: "Payment recorded & tracking started",
                     insertedId: insertResult.insertedId,
-                    updatedParcel: updateResult.modifiedCount,
                 });
 
             } catch (error) {
