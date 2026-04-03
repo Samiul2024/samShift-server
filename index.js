@@ -32,9 +32,28 @@ async function run() {
         await client.connect();
 
         const db = client.db("samShiftDB"); // database name
+        const usersCollection = db.collection('users');
         const parcelCollection = db.collection("parcels"); //collection
         const paymentsCollection = db.collection('payments');
         const trackingCollection = db.collection('tracking');
+
+
+
+        app.post('/users', async (req, res) => {
+            const email = req.body.email;
+            const userExists = await usersCollection.findOne({ email });
+            if (userExists) {
+                return res.send({
+                    inserted: false,
+                    message: "User already exists"
+                });
+            }
+            const user = req.body;
+            const result = await usersCollection.insertOne(user);
+            res.send(result);
+
+        })
+
         // parcels api
         // GET: All parcels or  parcels by user (created_by), sorted by latest 
         app.get("/parcels", async (req, res) => {
