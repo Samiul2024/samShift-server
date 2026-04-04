@@ -1,10 +1,12 @@
-require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion } = require('mongodb');
+const admin = require("firebase-admin");
+
+// load environment variables from .env file
+require("dotenv").config();
 
 const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_KEY);
-
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -13,6 +15,13 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+
+
+const serviceAccount = require("./firebase-admin-key.json");
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
 
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.zpsg6ul.mongodb.net/?appName=Cluster0`;
@@ -38,11 +47,38 @@ async function run() {
         const trackingCollection = db.collection('tracking');
 
 
+        // custom middlewares
+        const verifyFBToken = async (req, res, next) => {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                return res.status(401).send({ message: 'Unauthorized access' })
+            }
+            // console.log('header in middleware', req.headers)
+            const token = authHeader.split(' ')[1];
+            if (!token) {
+                return res.status(401).send({ message: 'Unauthorized access' })
+
+            }
+
+            //verify the token
+            try {
+                const decoded = await admin.auth().verifyIdToken(token);
+                req.decoded = decoded;
+                next();
+            } catch (error) {
+                return res.status(401).send({ message: 'Forbidden access' })
+            }
+
+
+
+        }
+
 
         app.post('/users', async (req, res) => {
             const email = req.body.email;
             const userExists = await usersCollection.findOne({ email });
             if (userExists) {
+                //update last log in info
                 return res.send({
                     inserted: false,
                     message: "User already exists"
@@ -56,7 +92,7 @@ async function run() {
 
         // parcels api
         // GET: All parcels or  parcels by user (created_by), sorted by latest 
-        app.get("/parcels", async (req, res) => {
+        app.get("/parcels", verifyFBToken, async (req, res) => {
             try {
                 const userEmail = req.query.email;
 
@@ -116,11 +152,6 @@ async function run() {
             });
         });
 
-        // GET ALL PARCELS
-        app.get("/parcels", async (req, res) => {
-            const result = await parcelCollection.find().toArray();
-            res.send(result);
-        });
 
         const { ObjectId } = require("mongodb");
 
@@ -205,7 +236,9 @@ async function run() {
         //payments
 
 
-        app.get("/payments", async (req, res) => {
+        app.get("/payments", verifyFBToken, async (req, res) => {
+            // console.log('headers in payments', req.headers);
+
             try {
                 const email = req.query.email;
 
