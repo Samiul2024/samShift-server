@@ -45,6 +45,7 @@ async function run() {
         const parcelCollection = db.collection("parcels"); //collection
         const paymentsCollection = db.collection('payments');
         const trackingCollection = db.collection('tracking');
+        const ridersCollection = db.collection('riders');
 
 
         // custom middlewares
@@ -185,6 +186,31 @@ async function run() {
             }
         });
 
+        /* riders */
+        app.post('/riders', async (req, res) => {
+            const rider = req.body;
+            const result = await ridersCollection.insertOne(rider);
+            res.send(result);
+        });
+
+        app.get('/riders/pending', async (req, res) => {
+            try {
+                const query = { status: "pending" };
+
+                const pendingRiders = await ridersCollection
+                    .find(query)
+                    .sort({ applied_at: -1 }) // latest first
+                    .toArray();
+
+                res.send(pendingRiders);
+
+            } catch (error) {
+                console.error("Error fetching pending riders:", error);
+                res.status(500).send({
+                    message: "Failed to fetch pending riders"
+                });
+            }
+        });
 
         // tracking
         app.post("/tracking", async (req, res) => {
