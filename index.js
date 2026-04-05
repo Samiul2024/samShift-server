@@ -66,7 +66,7 @@ async function run() {
                 req.decoded = decoded;
                 next();
             } catch (error) {
-                return res.status(401).send({ message: 'Forbidden access' })
+                return res.status(403).send({ message: 'Forbidden access' })
             }
 
 
@@ -240,9 +240,13 @@ async function run() {
             // console.log('headers in payments', req.headers);
 
             try {
-                const email = req.query.email;
+                const userEmail = req.query.email;
+                console.log('decoded', req.decoded);
+                if (req.decoded.email !== userEmail) {
+                    return res.status(403).send({ message: 'forbidden access' })
+                }
 
-                const query = email ? { email } : {};
+                const query = userEmail ? { email: userEmail } : {};
 
                 const payments = await paymentsCollection
                     .find(query)
