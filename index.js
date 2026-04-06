@@ -212,6 +212,30 @@ async function run() {
             }
         });
 
+
+        app.patch('/riders/:id', async (req, res) => {
+            const id = req.params.id;
+            const { status } = req.body;
+            const query = { _id: new ObjectId(id) }
+            const updateDoc = {
+                $set: {
+                    status
+                }
+            }
+
+            try {
+                const result = await ridersCollection.updateOne(
+                    query, updateDoc
+                );
+
+                res.send(result);
+            } catch (err) {
+                res.status(500).send({ message: "Failed to update riders status" });
+            }
+        });
+
+        /* Riders ends */
+
         // tracking
         app.post("/tracking", async (req, res) => {
             try {
