@@ -213,6 +213,13 @@ async function run() {
         });
 
 
+        app.get('/riders/active', async (req, res) => {
+            const riders = await ridersCollection
+                .find({ status: "approved" }) //  active riders
+                .toArray();
+            res.send(riders);
+        });
+
         app.patch('/riders/:id', async (req, res) => {
             const id = req.params.id;
             const { status } = req.body;
@@ -233,6 +240,9 @@ async function run() {
                 res.status(500).send({ message: "Failed to update riders status" });
             }
         });
+
+
+
 
         /* Riders ends */
 
