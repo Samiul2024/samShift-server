@@ -222,22 +222,42 @@ async function run() {
 
         app.patch('/riders/:id', async (req, res) => {
             const id = req.params.id;
-            const { status } = req.body;
-            const query = { _id: new ObjectId(id) }
-            const updateDoc = {
-                $set: {
-                    status
-                }
-            }
+            const { status, email } = req.body;
 
             try {
-                const result = await ridersCollection.updateOne(
-                    query, updateDoc
+                // 1️ Update rider status
+                const riderUpdate = await ridersCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { status } }
                 );
 
-                res.send(result);
-            } catch (err) {
-                res.status(500).send({ message: "Failed to update riders status" });
+                // 2️ If approved → update user role
+                if (status === "approved") {
+                    await usersCollection.updateOne(
+                        { email: email },
+                        { $set: { role: "rider" } }
+                    );
+                }
+
+                // 3️ If rejected/inactive → optional downgrade
+                if (status === "inactive" || status === "rejected") {
+                    await usersCollection.updateOne(
+                        { email: email },
+                        { $set: { role: "user" } }
+                    );
+                }
+
+                res.send({
+                    success: true,
+                    message: "Rider status & role updated",
+                    riderUpdate
+                });
+
+            } catch (error) {
+                console.error("Error updating rider:", error);
+                res.status(500).send({
+                    message: "Failed to update rider"
+                });
             }
         });
 
