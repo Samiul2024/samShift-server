@@ -74,22 +74,92 @@ async function run() {
 
         }
 
-
+        /* admin set up starts */
+        //  Ensure created_at when creating user
         app.post('/users', async (req, res) => {
             const email = req.body.email;
+
             const userExists = await usersCollection.findOne({ email });
             if (userExists) {
-                //update last log in info
                 return res.send({
                     inserted: false,
                     message: "User already exists"
                 });
             }
-            const user = req.body;
+
+            const user = {
+                ...req.body,
+                role: "user", // default role
+                created_at: new Date()
+            };
+
             const result = await usersCollection.insertOne(user);
             res.send(result);
+        });
 
-        })
+
+        //  SEARCH USER (REGEX)
+        app.get('/users/search', async (req, res) => {
+            try {
+                const query = req.query.query;
+
+                if (!query) {
+                    return res.send([]);
+                }
+
+                const users = await usersCollection
+                    .find({
+                        email: { $regex: query, $options: "i" } // 🔥 case-insensitive search
+                    })
+                    .limit(10) // prevent overload
+                    .toArray();
+
+                res.send(users);
+
+            } catch (error) {
+                console.error("Search error:", error);
+                res.status(500).send({ message: "Failed to search users" });
+            }
+        });
+
+
+        //  MAKE ADMIN
+        app.patch('/users/admin/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+
+                const result = await usersCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { role: "admin" } }
+                );
+
+                res.send(result);
+
+            } catch (error) {
+                console.error("Make admin error:", error);
+                res.status(500).send({ message: "Failed to make admin" });
+            }
+        });
+
+
+        //  REMOVE ADMIN (BACK TO USER)
+        app.patch('/users/remove-admin/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+
+                const result = await usersCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { role: "user" } }
+                );
+
+                res.send(result);
+
+            } catch (error) {
+                console.error("Remove admin error:", error);
+                res.status(500).send({ message: "Failed to remove admin" });
+            }
+        });
+        /* admin set up ends */
 
         // parcels api
         // GET: All parcels or  parcels by user (created_by), sorted by latest 
