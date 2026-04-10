@@ -123,6 +123,28 @@ async function run() {
         });
 
 
+        app.get('/users/role/:email', verifyFBToken, async (req, res) => {
+            const email = req.params.email;
+
+            // Optional but IMPORTANT security check
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: "Forbidden access : email is required" });
+            }
+
+            try {
+                const user = await usersCollection.findOne({ email });
+
+                if (!user) {
+                    return res.send({ role: "user" }); // default role
+                }
+
+                res.send({ role: user.role });
+            } catch (error) {
+                res.status(500).send({ message: "Server error" });
+            }
+        });
+
+
         //  MAKE ADMIN
         app.patch('/users/admin/:id', async (req, res) => {
             try {
