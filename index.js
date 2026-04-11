@@ -285,16 +285,47 @@ async function run() {
             res.send(result);
         });
 
+        // app.get('/riders/pending', async (req, res) => {
+        //     try {
+        //         const query = { status: "pending" };
+
+        //         const pendingRiders = await ridersCollection
+        //             .find(query)
+        //             .sort({ applied_at: -1 }) // latest first
+        //             .toArray();
+
+        //         res.send(pendingRiders);
+
+        //     } catch (error) {
+        //         console.error("Error fetching pending riders:", error);
+        //         res.status(500).send({
+        //             message: "Failed to fetch pending riders"
+        //         });
+        //     }
+        // });
         app.get('/riders/pending', async (req, res) => {
             try {
-                const query = { status: "pending" };
-
-                const pendingRiders = await ridersCollection
-                    .find(query)
-                    .sort({ applied_at: -1 }) // latest first
+                const riders = await ridersCollection
+                    .find({ status: "pending" })
+                    .sort({ applied_at: -1 })
                     .toArray();
 
-                res.send(pendingRiders);
+                // 🔥 JOIN WITH USERS COLLECTION
+                const enrichedRiders = await Promise.all(
+                    riders.map(async (rider) => {
+                        const user = await usersCollection.findOne({
+                            email: rider.email
+                        });
+
+                        return {
+                            ...rider,
+                            photoURL: user?.photoURL,
+                            name: user?.name || rider.name
+                        };
+                    })
+                );
+
+                res.send(enrichedRiders);
 
             } catch (error) {
                 console.error("Error fetching pending riders:", error);
@@ -304,12 +335,25 @@ async function run() {
             }
         });
 
-
         app.get('/riders/active', async (req, res) => {
             const riders = await ridersCollection
-                .find({ status: "approved" }) //  active riders
+                .find({ status: "approved" })
                 .toArray();
-            res.send(riders);
+
+            // 🔥 join with users collection
+            const enrichedRiders = await Promise.all(
+                riders.map(async (rider) => {
+                    const user = await usersCollection.findOne({ email: rider.email });
+
+                    return {
+                        ...rider,
+                        photoURL: user?.photoURL,
+                        name: user?.name || rider.name
+                    };
+                })
+            );
+
+            res.send(enrichedRiders);
         });
 
         app.patch('/riders/:id', async (req, res) => {
