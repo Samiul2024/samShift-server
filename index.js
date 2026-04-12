@@ -74,6 +74,17 @@ async function run() {
 
         }
 
+
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email }
+            const user = await usersCollection.findOne(query);
+            if (!user || user.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            next();
+        }
+
         /* admin set up starts */
         //  Ensure created_at when creating user
         app.post('/users', async (req, res) => {
@@ -146,7 +157,7 @@ async function run() {
 
 
         //  MAKE ADMIN
-        app.patch('/users/admin/:id', async (req, res) => {
+        app.patch('/users/admin/:id', verifyFBToken, verifyAdmin, async (req, res) => {
             try {
                 const id = req.params.id;
 
@@ -165,7 +176,7 @@ async function run() {
 
 
         //  REMOVE ADMIN (BACK TO USER)
-        app.patch('/users/remove-admin/:id', async (req, res) => {
+        app.patch('/users/remove-admin/:id', verifyFBToken, verifyAdmin, async (req, res) => {
             try {
                 const id = req.params.id;
 
@@ -303,7 +314,7 @@ async function run() {
         //         });
         //     }
         // });
-        app.get('/riders/pending', verifyFBToken, async (req, res) => {
+        app.get('/riders/pending', verifyFBToken, verifyAdmin, async (req, res) => {
             try {
                 const riders = await ridersCollection
                     .find({ status: "pending" })
@@ -335,7 +346,7 @@ async function run() {
             }
         });
 
-        app.get('/riders/active', verifyFBToken, async (req, res) => {
+        app.get('/riders/active', verifyFBToken, verifyAdmin, async (req, res) => {
             const riders = await ridersCollection
                 .find({ status: "approved" })
                 .toArray();
