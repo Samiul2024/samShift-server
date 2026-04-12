@@ -303,7 +303,7 @@ async function run() {
         //         });
         //     }
         // });
-        app.get('/riders/pending', async (req, res) => {
+        app.get('/riders/pending', verifyFBToken, async (req, res) => {
             try {
                 const riders = await ridersCollection
                     .find({ status: "pending" })
@@ -335,7 +335,7 @@ async function run() {
             }
         });
 
-        app.get('/riders/active', async (req, res) => {
+        app.get('/riders/active', verifyFBToken, async (req, res) => {
             const riders = await ridersCollection
                 .find({ status: "approved" })
                 .toArray();
