@@ -216,6 +216,24 @@ async function run() {
             }
         });
 
+        // ✅ ASSIGNABLE PARCELS (MUST BE ABOVE /parcels/:id)
+        app.get('/parcels/assignable', verifyFBToken, verifyAdmin, async (req, res) => {
+            try {
+                const parcels = await parcelCollection.find({
+                    payment_status: "paid",
+                    delivery_status: "not-collected"
+                })
+                    .sort({ creation_date: -1 })
+                    .toArray();
+
+                res.send(parcels);
+            } catch (error) {
+                console.error("Error fetching assignable parcels:", error);
+                res.status(500).send({
+                    message: "Failed to fetch assignable parcels"
+                });
+            }
+        });
 
         app.get('/parcels/:id', async (req, res) => {
             try {
@@ -289,6 +307,9 @@ async function run() {
             }
         });
 
+
+
+        // parcels apis ends here
         /* riders */
         app.post('/riders', async (req, res) => {
             const rider = req.body;
