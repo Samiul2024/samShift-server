@@ -388,6 +388,24 @@ async function run() {
             res.send(enrichedRiders);
         });
 
+app.get('/riders/by-district', verifyFBToken, verifyAdmin, async (req, res) => {
+    const district = req.query.district;
+
+    try {
+        const riders = await ridersCollection
+            .find({
+                district: district,
+                status: "approved"
+            })
+            .toArray();
+
+        res.send(riders);
+
+    } catch (error) {
+        res.status(500).send({ message: "Failed to fetch riders" });
+    }
+});
+
         app.patch('/riders/:id', async (req, res) => {
             const id = req.params.id;
             const { status, email } = req.body;
