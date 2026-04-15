@@ -307,7 +307,57 @@ async function run() {
             }
         });
 
+        app.patch('/parcels/assign-rider/:id', verifyFBToken, verifyAdmin, async (req, res) => {
+            const parcelId = req.params.id;
+            const { riderId, riderEmail, riderName } = req.body;
 
+            try {
+                // 1️⃣ Update parcel
+                const parcelUpdate = await parcelCollection.updateOne(
+                    { _id: new ObjectId(parcelId) },
+                    {
+                        $set: {
+                            delivery_status: "in-transit",
+                            assigned_rider_id: riderId,
+                            assigned_rider_email: riderEmail,
+                            assigned_rider_name: riderName
+                        }
+                    }
+                );
+
+                // 2️⃣ Update rider work status
+                const riderUpdate = await ridersCollection.updateOne(
+                    { _id: new ObjectId(riderId) },
+                    {
+                        $set: {
+                            work_status: "in-delivery"
+                        }
+                    }
+                );
+
+                // 3️⃣ Add tracking update
+                await trackingCollection.insertOne({
+                    tracking_id: req.body.tracking_id,
+                    status: "In Transit",
+                    message: `Parcel assigned to rider ${riderName}`,
+                    location: "Dispatch Center",
+                    created_at: new Date()
+                });
+
+                res.send({
+                    success: true,
+                    message: "Rider assigned successfully",
+                    parcelUpdate,
+                    riderUpdate
+                });
+
+            } catch (error) {
+                console.error("Assign rider error:", error);
+                res.status(500).send({
+                    message: "Failed to assign rider"
+                });
+            }
+        });
 
         // parcels apis ends here
         /* riders */
@@ -388,23 +438,23 @@ async function run() {
             res.send(enrichedRiders);
         });
 
-app.get('/riders/by-district', verifyFBToken, verifyAdmin, async (req, res) => {
-    const district = req.query.district;
+        app.get('/riders/by-district', verifyFBToken, verifyAdmin, async (req, res) => {
+            const district = req.query.district;
 
-    try {
-        const riders = await ridersCollection
-            .find({
-                district: district,
-                status: "approved"
-            })
-            .toArray();
+            try {
+                const riders = await ridersCollection
+                    .find({
+                        district: district,
+                        status: "approved"
+                    })
+                    .toArray();
 
-        res.send(riders);
+                res.send(riders);
 
-    } catch (error) {
-        res.status(500).send({ message: "Failed to fetch riders" });
-    }
-});
+            } catch (error) {
+                res.status(500).send({ message: "Failed to fetch riders" });
+            }
+        });
 
         app.patch('/riders/:id', async (req, res) => {
             const id = req.params.id;
