@@ -235,6 +235,40 @@ async function run() {
             }
         });
 
+
+        // get assigned parcels
+        app.get('/parcels/assigned', verifyFBToken, verifyAdmin, async (req, res) => {
+            try {
+                const parcels = await parcelCollection.find({
+                    delivery_status: "rider-assigned"
+                })
+                    .sort({ creation_date: -1 })
+                    .toArray();
+
+                res.send(parcels);
+
+            } catch (error) {
+                console.error("Error fetching assigned parcels:", error);
+                res.status(500).send({
+                    message: "Failed to fetch assigned parcels"
+                });
+            }
+        });
+
+
+        //Filter by rider
+        app.get('/parcels/assigned/rider', verifyFBToken, async (req, res) => {
+            const email = req.query.email;
+
+            const parcels = await parcelCollection.find({
+                assigned_rider_email: email
+            }).toArray();
+
+            res.send(parcels);
+        });
+
+
+        // bug hotspot: always keep this dynamic route below
         app.get('/parcels/:id', async (req, res) => {
             try {
                 const id = req.params.id;
@@ -256,6 +290,8 @@ async function run() {
 
             }
         });
+
+
 
         //POST:  CREATE a new  PARCEL (POST)
         app.post("/parcels", async (req, res) => {
@@ -317,7 +353,7 @@ async function run() {
                     { _id: new ObjectId(parcelId) },
                     {
                         $set: {
-                            delivery_status: "in-transit",
+                            delivery_status: "rider-assigned",
                             assigned_rider_id: riderId,
                             assigned_rider_email: riderEmail,
                             assigned_rider_name: riderName
