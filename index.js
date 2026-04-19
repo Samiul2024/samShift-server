@@ -569,9 +569,15 @@ async function run() {
             try {
                 const tracking_id = req.params.tracking_id;
 
+                if (!tracking_id) {
+                    return res.status(400).send({
+                        message: "Tracking ID is required"
+                    });
+                }
+
                 const updates = await trackingCollection
                     .find({ tracking_id })
-                    .sort({ created_at: -1 }) // latest first
+                    .sort({ created_at: -1 })
                     .toArray();
 
                 res.send(updates);
@@ -628,7 +634,7 @@ async function run() {
                     amount,
                     paymentMethod,
                     transactionId,
-                    tracking_id, // 🔥 IMPORTANT
+                    tracking_id,
                 } = paymentData;
 
                 // 1️⃣ Update parcel
