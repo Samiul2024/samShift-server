@@ -268,6 +268,44 @@ async function run() {
         });
 
 
+        //Update delivery status
+        app.patch('/parcels/update-status/:id', verifyFBToken, async (req, res) => {
+            const id = req.params.id;
+            const { status, tracking_id } = req.body;
+
+            try {
+                // update parcel status
+                await parcelCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    {
+                        $set: {
+                            delivery_status: status
+                        }
+                    }
+                );
+
+                // tracking update
+                await trackingCollection.insertOne({
+                    tracking_id,
+                    status,
+                    message: `Parcel ${status}`,
+                    location: "On Route",
+                    created_at: new Date()
+                });
+
+                res.send({
+                    success: true,
+                    message: "Status updated"
+                });
+
+            } catch (error) {
+                res.status(500).send({
+                    message: "Failed to update status"
+                });
+            }
+        });
+
+
         // bug hotspot: always keep this dynamic route below
         app.get('/parcels/:id', async (req, res) => {
             try {
