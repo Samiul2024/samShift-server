@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const admin = require("firebase-admin");
 
 // load environment variables from .env file
@@ -74,7 +74,7 @@ async function run() {
 
         }
 
-
+        //verifyAdmin
         const verifyAdmin = async (req, res, next) => {
             const email = req.decoded.email;
             const query = { email }
@@ -84,6 +84,18 @@ async function run() {
             }
             next();
         }
+
+        //verifyRider
+        const verifyRider = async (req, res, next) => {
+            const email = req.decoded.email;
+            const user = await usersCollection.findOne({ email });
+
+            if (!user || user.role !== "rider") {
+                return res.status(403).send({ message: "Rider only access" });
+            }
+
+            next();
+        };
 
         /* admin set up starts */
         //  Ensure created_at when creating user
@@ -260,6 +272,10 @@ async function run() {
         app.get('/parcels/assigned/rider', verifyFBToken, async (req, res) => {
             const email = req.query.email;
 
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: "Forbidden access" });
+            }
+
             const parcels = await parcelCollection.find({
                 assigned_rider_email: email
             }).toArray();
@@ -349,7 +365,6 @@ async function run() {
         });
 
 
-        const { ObjectId } = require("mongodb");
 
         // DELETE: Delete a parcel
         app.delete("/parcels/:id", async (req, res) => {
@@ -437,10 +452,20 @@ async function run() {
 
         //  ADD THIS ROUTE (IMPORTANT)
 
-        app.patch('/parcels/rider-accept/:id', verifyFBToken, async (req, res) => {
+        app.patch('/parcels/rider-accept/:id', verifyFBToken, verifyRider, async (req, res) => {
             const id = req.params.id;
 
             try {
+                //  1. Get parcel first
+                const parcel = await parcelCollection.findOne({
+                    _id: new ObjectId(id)
+                });
+
+                if (!parcel) {
+                    return res.status(404).send({ message: "Parcel not found" });
+                }
+
+                //  2. Update parcel
                 await parcelCollection.updateOne(
                     { _id: new ObjectId(id) },
                     {
@@ -451,9 +476,9 @@ async function run() {
                     }
                 );
 
-                //  TRACKING ENTRY
+                //  3.  DB tracking_id 
                 await trackingCollection.insertOne({
-                    tracking_id: req.body?.tracking_id || "N/A",
+                    tracking_id: parcel.tracking_id,
                     status: "Accepted by Rider",
                     message: "Rider accepted the parcel",
                     location: "Dispatch Center",
