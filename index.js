@@ -120,7 +120,7 @@ async function run() {
 
                 const users = await usersCollection
                     .find({
-                        email: { $regex: query, $options: "i" } // 🔥 case-insensitive search
+                        email: { $regex: query, $options: "i" } //  case-insensitive search
                     })
                     .limit(10) // prevent overload
                     .toArray();
@@ -392,6 +392,7 @@ async function run() {
                     {
                         $set: {
                             delivery_status: "rider-assigned",
+                            rider_status: "pending",
                             assigned_rider_id: riderId,
                             assigned_rider_email: riderEmail,
                             assigned_rider_name: riderName
@@ -433,6 +434,45 @@ async function run() {
             }
         });
 
+
+        //  ADD THIS ROUTE (IMPORTANT)
+
+        app.patch('/parcels/rider-accept/:id', verifyFBToken, async (req, res) => {
+            const id = req.params.id;
+
+            try {
+                await parcelCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    {
+                        $set: {
+                            rider_status: "accepted",
+                            delivery_status: "accepted-by-rider"
+                        }
+                    }
+                );
+
+                //  TRACKING ENTRY
+                await trackingCollection.insertOne({
+                    tracking_id: req.body?.tracking_id || "N/A",
+                    status: "Accepted by Rider",
+                    message: "Rider accepted the parcel",
+                    location: "Dispatch Center",
+                    created_at: new Date()
+                });
+
+                res.send({
+                    success: true,
+                    message: "Rider accepted delivery"
+                });
+
+            } catch (error) {
+                console.error("Accept error:", error);
+                res.status(500).send({
+                    message: "Failed to accept delivery"
+                });
+            }
+        });
+
         // parcels apis ends here
         /* riders */
         app.post('/riders', async (req, res) => {
@@ -466,7 +506,7 @@ async function run() {
                     .sort({ applied_at: -1 })
                     .toArray();
 
-                // 🔥 JOIN WITH USERS COLLECTION
+                //  JOIN WITH USERS COLLECTION
                 const enrichedRiders = await Promise.all(
                     riders.map(async (rider) => {
                         const user = await usersCollection.findOne({
@@ -496,7 +536,7 @@ async function run() {
                 .find({ status: "approved" })
                 .toArray();
 
-            // 🔥 join with users collection
+            //  join with users collection
             const enrichedRiders = await Promise.all(
                 riders.map(async (rider) => {
                     const user = await usersCollection.findOne({ email: rider.email });
@@ -706,7 +746,7 @@ async function run() {
 
                 const insertResult = await paymentsCollection.insertOne(paymentDoc);
 
-                // 3️⃣ 🔥 INSERT INITIAL TRACKING
+                // 3️⃣  INSERT INITIAL TRACKING
                 await trackingCollection.insertOne({
                     tracking_id,
                     status: "Parcel Confirmed",
