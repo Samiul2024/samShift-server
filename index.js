@@ -450,10 +450,11 @@ async function run() {
         });
 
 
-        //  ADD THIS ROUTE (IMPORTANT)
 
         app.patch('/parcels/rider-accept/:id', verifyFBToken, verifyRider, async (req, res) => {
             const id = req.params.id;
+            const riderEmail = req.decoded.email;
+
 
             try {
                 //  1. Get parcel first
@@ -463,6 +464,19 @@ async function run() {
 
                 if (!parcel) {
                     return res.status(404).send({ message: "Parcel not found" });
+                }
+
+                if (parcel.assigned_rider_email !== riderEmail) {
+                    return res.status(403).send({
+                        message: "You are not assigned to this parcel"
+                    });
+                }
+
+                // Prevent double accept
+                if (parcel.rider_status === "accepted") {
+                    return res.send({
+                        message: "Already accepted"
+                    });
                 }
 
                 //  2. Update parcel
