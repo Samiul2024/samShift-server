@@ -285,11 +285,27 @@ async function run() {
 
 
         //Update delivery status
-        app.patch('/parcels/update-status/:id', verifyFBToken, async (req, res) => {
+        app.patch('/parcels/update-status/:id', verifyFBToken, verifyRider, async (req, res) => {
             const id = req.params.id;
             const { status, tracking_id } = req.body;
+            const riderEmail = req.decoded.email;
+
 
             try {
+                const parcel = await parcelCollection.findOne({
+                    _id: new ObjectId(id)
+                });
+
+                if (!parcel) {
+                    return res.status(404).send({ message: "Parcel not found" });
+                }
+
+                // SECURITY CHECK
+                if (parcel.assigned_rider_email !== riderEmail) {
+                    return res.status(403).send({
+                        message: "Unauthorized"
+                    });
+                }
                 // update parcel status
                 await parcelCollection.updateOne(
                     { _id: new ObjectId(id) },
