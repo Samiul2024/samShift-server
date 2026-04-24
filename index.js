@@ -46,6 +46,7 @@ async function run() {
         const paymentsCollection = db.collection('payments');
         const trackingCollection = db.collection('tracking');
         const ridersCollection = db.collection('riders');
+        const earningsCollection = db.collection("earnings");
 
 
         // custom middlewares
@@ -290,6 +291,13 @@ async function run() {
             const { status, tracking_id } = req.body;
             const riderEmail = req.decoded.email;
 
+            const allowedStatuses = ["picked-up", "in-transit", "delivered"];
+
+            if (!allowedStatuses.includes(status)) {
+                return res.status(400).send({
+                    message: "Invalid status"
+                });
+            }
 
             try {
                 const parcel = await parcelCollection.findOne({
@@ -306,6 +314,25 @@ async function run() {
                         message: "Unauthorized"
                     });
                 }
+
+                // ✅ CREATE EARNING AFTER VALIDATION
+                if (status === "delivered") {
+                    const existing = await earningsCollection.findOne({
+                        parcel_id: parcel._id
+                    });
+
+                    if (!existing) {
+                        await earningsCollection.insertOne({
+                            rider_id: parcel.assigned_rider_id,
+                            rider_email: parcel.assigned_rider_email,
+                            parcel_id: parcel._id,
+                            amount: parcel.delivery_charge || 50,
+                            status: "pending",
+                            created_at: new Date()
+                        });
+                    }
+                }
+
                 // update parcel status
                 await parcelCollection.updateOne(
                     { _id: new ObjectId(id) },
@@ -754,6 +781,16 @@ async function run() {
             }
         });
 
+        app.get('/earnings', verifyFBToken, verifyRider, async (req, res) => {
+            const email = req.decoded.email;
+
+            const earnings = await earningsCollection
+                .find({ rider_email: email })
+                .sort({ created_at: -1 })
+                .toArray();
+
+            res.send(earnings);
+        });
 
         //POST : Record Payment and update parcel status
         // POST : Record Payment + Update Parcel + Add Tracking
