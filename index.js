@@ -308,14 +308,14 @@ async function run() {
                     return res.status(404).send({ message: "Parcel not found" });
                 }
 
-                // SECURITY CHECK
+                // 🔐 Security check
                 if (parcel.assigned_rider_email !== riderEmail) {
                     return res.status(403).send({
                         message: "Unauthorized"
                     });
                 }
 
-                // ✅ CREATE EARNING AFTER VALIDATION
+                // 💰 EARNING LOGIC (FIXED POSITION)
                 if (status === "delivered") {
                     const existing = await earningsCollection.findOne({
                         parcel_id: parcel._id
@@ -333,7 +333,7 @@ async function run() {
                     }
                 }
 
-                // update parcel status
+                // 📦 Update parcel
                 await parcelCollection.updateOne(
                     { _id: new ObjectId(id) },
                     {
@@ -343,7 +343,7 @@ async function run() {
                     }
                 );
 
-                // tracking update
+                // 📍 Tracking
                 await trackingCollection.insertOne({
                     tracking_id,
                     status,
