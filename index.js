@@ -792,6 +792,77 @@ async function run() {
             res.send(earnings);
         });
 
+
+        // admin analytics
+
+        app.get("/admin/analytics", verifyFBToken, verifyAdmin, async (req, res) => {
+            try {
+                // 📊 TOTAL REVENUE
+                const revenueResult = await paymentsCollection.aggregate([
+                    {
+                        $group: {
+                            _id: null,
+                            totalRevenue: { $sum: "$amount" }
+                        }
+                    }
+                ]).toArray();
+
+                const totalRevenue = revenueResult[0]?.totalRevenue || 0;
+
+                // 📦 DELIVERY STATS
+                const deliveryStats = await parcelCollection.aggregate([
+                    {
+                        $group: {
+                            _id: "$delivery_status",
+                            count: { $sum: 1 }
+                        }
+                    }
+                ]).toArray();
+
+                let totalParcels = 0;
+                let deliveredParcels = 0;
+
+                deliveryStats.forEach(stat => {
+                    totalParcels += stat.count;
+                    if (stat._id === "delivered") {
+                        deliveredParcels = stat.count;
+                    }
+                });
+
+                const successRate = totalParcels
+                    ? ((deliveredParcels / totalParcels) * 100).toFixed(2)
+                    : 0;
+
+                // 📊 MONTHLY REVENUE (for chart)
+                const monthlyRevenue = await paymentsCollection.aggregate([
+                    {
+                        $group: {
+                            _id: {
+                                year: { $year: "$paid_at" },
+                                month: { $month: "$paid_at" }
+                            },
+                            total: { $sum: "$amount" }
+                        }
+                    },
+                    { $sort: { "_id.year": 1, "_id.month": 1 } }
+                ]).toArray();
+
+                res.send({
+                    totalRevenue,
+                    totalParcels,
+                    deliveredParcels,
+                    successRate,
+                    monthlyRevenue
+                });
+
+            } catch (error) {
+                console.error("Analytics error:", error);
+                res.status(500).send({ message: "Failed to fetch analytics" });
+            }
+        });
+
+        
+
         //POST : Record Payment and update parcel status
         // POST : Record Payment + Update Parcel + Add Tracking
         app.post("/payments", async (req, res) => {
