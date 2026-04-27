@@ -797,8 +797,24 @@ async function run() {
 
         app.get("/admin/analytics", verifyFBToken, verifyAdmin, async (req, res) => {
             try {
-                // 📊 TOTAL REVENUE
+                const range = req.query.range || "7d";
+
+                const now = new Date();
+                let startDate;
+
+                if (range === "30d") {
+                    startDate = new Date(now.setDate(now.getDate() - 30));
+                } else {
+                    startDate = new Date(now.setDate(now.getDate() - 7));
+                }
+
+                // 📊 TOTAL REVENUE (FILTERED)
                 const revenueResult = await paymentsCollection.aggregate([
+                    {
+                        $match: {
+                            paid_at: { $gte: startDate }
+                        }
+                    },
                     {
                         $group: {
                             _id: null,
@@ -809,8 +825,13 @@ async function run() {
 
                 const totalRevenue = revenueResult[0]?.totalRevenue || 0;
 
-                // 📦 DELIVERY STATS
+                // 📦 DELIVERY STATS (FILTERED)
                 const deliveryStats = await parcelCollection.aggregate([
+                    {
+                        $match: {
+                            creation_date: { $gte: startDate }
+                        }
+                    },
                     {
                         $group: {
                             _id: "$delivery_status",
@@ -833,18 +854,45 @@ async function run() {
                     ? ((deliveredParcels / totalParcels) * 100).toFixed(2)
                     : 0;
 
-                // 📊 MONTHLY REVENUE (for chart)
-                const monthlyRevenue = await paymentsCollection.aggregate([
+                // 📊 DAILY REVENUE (CHART)
+                const dailyRevenue = await paymentsCollection.aggregate([
+                    {
+                        $match: {
+                            paid_at: { $gte: startDate }
+                        }
+                    },
                     {
                         $group: {
                             _id: {
-                                year: { $year: "$paid_at" },
+                                day: { $dayOfMonth: "$paid_at" },
                                 month: { $month: "$paid_at" }
                             },
                             total: { $sum: "$amount" }
                         }
                     },
-                    { $sort: { "_id.year": 1, "_id.month": 1 } }
+                    { $sort: { "_id.month": 1, "_id.day": 1 } }
+                ]).toArray();
+
+                // 🏆 TOP RIDERS (FROM EARNINGS)
+                const topRiders = await earningsCollection.aggregate([
+                    {
+                        $match: {
+                            created_at: { $gte: startDate }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: "$rider_email",
+                            totalEarned: { $sum: "$amount" },
+                            totalDeliveries: { $sum: 1 }
+                        }
+                    },
+                    {
+                        $sort: { totalEarned: -1 }
+                    },
+                    {
+                        $limit: 5
+                    }
                 ]).toArray();
 
                 res.send({
@@ -852,7 +900,8 @@ async function run() {
                     totalParcels,
                     deliveredParcels,
                     successRate,
-                    monthlyRevenue
+                    dailyRevenue,
+                    topRiders
                 });
 
             } catch (error) {
@@ -861,7 +910,7 @@ async function run() {
             }
         });
 
-        
+
 
         //POST : Record Payment and update parcel status
         // POST : Record Payment + Update Parcel + Add Tracking
