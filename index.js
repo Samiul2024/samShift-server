@@ -47,6 +47,8 @@ async function run() {
         const trackingCollection = db.collection('tracking');
         const ridersCollection = db.collection('riders');
         const earningsCollection = db.collection("earnings");
+        const withdrawRequestsCollection = db.collection("withdrawRequests");
+
 
 
         // custom middlewares
@@ -792,6 +794,137 @@ async function run() {
             res.send(earnings);
         });
 
+
+        // WITHDRAW SYSTEM 
+
+        // 🔹 Create Withdraw Request
+        app.post("/withdraw-request", verifyFBToken, verifyRider, async (req, res) => {
+            const email = req.decoded.email;
+            const { amount, method } = req.body;
+
+            try {
+                if (!amount || amount <= 0) {
+                    return res.status(400).send({ message: "Invalid amount" });
+                }
+
+                // 🚫 Prevent multiple pending requests
+                const existingRequest = await withdrawRequestsCollection.findOne({
+                    rider_email: email,
+                    status: "pending"
+                });
+
+                if (existingRequest) {
+                    return res.status(400).send({
+                        message: "You already have a pending request"
+                    });
+                }
+
+                // 💰 Get available balance
+                const earnings = await earningsCollection.find({
+                    rider_email: email,
+                    status: "pending"
+                }).toArray();
+
+                const totalBalance = earnings.reduce((sum, e) => sum + e.amount, 0);
+
+                if (amount > totalBalance) {
+                    return res.status(400).send({
+                        message: "Insufficient balance"
+                    });
+                }
+
+                const request = {
+                    rider_email: email,
+                    amount,
+                    method,
+                    status: "pending",
+                    created_at: new Date(),
+                    processed_at: null
+                };
+
+                const result = await withdrawRequestsCollection.insertOne(request);
+
+                res.send({
+                    success: true,
+                    message: "Withdraw request submitted",
+                    insertedId: result.insertedId
+                });
+
+            } catch (error) {
+                res.status(500).send({ message: "Failed to request withdrawal" });
+            }
+        });
+
+
+        // 🔹 Rider: Get own requests
+        app.get("/withdraw-requests/my", verifyFBToken, verifyRider, async (req, res) => {
+            const email = req.decoded.email;
+
+            const requests = await withdrawRequestsCollection
+                .find({ rider_email: email })
+                .sort({ created_at: -1 })
+                .toArray();
+
+            res.send(requests);
+        });
+
+
+        // 🔹 Admin: Get all requests
+        app.get("/admin/withdraw-requests", verifyFBToken, verifyAdmin, async (req, res) => {
+            const requests = await withdrawRequestsCollection
+                .find()
+                .sort({ created_at: -1 })
+                .toArray();
+
+            res.send(requests);
+        });
+
+
+        // 🔹 Admin: Approve request
+        app.patch("/admin/withdraw-approve/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+
+            try {
+                const request = await withdrawRequestsCollection.findOne({
+                    _id: new ObjectId(id)
+                });
+
+                if (!request) {
+                    return res.status(404).send({ message: "Request not found" });
+                }
+
+                if (request.status !== "pending") {
+                    return res.status(400).send({ message: "Already processed" });
+                }
+
+                // 💰 Mark earnings as paid
+                await earningsCollection.updateMany(
+                    {
+                        rider_email: request.rider_email,
+                        status: "pending"
+                    },
+                    {
+                        $set: { status: "paid" }
+                    }
+                );
+
+                // ✅ Update request
+                await withdrawRequestsCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    {
+                        $set: {
+                            status: "approved",
+                            processed_at: new Date()
+                        }
+                    }
+                );
+
+                res.send({ success: true, message: "Withdrawal approved" });
+
+            } catch (error) {
+                res.status(500).send({ message: "Failed to approve withdrawal" });
+            }
+        });
 
         // admin analytics
 
