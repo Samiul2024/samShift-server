@@ -272,28 +272,52 @@ async function run() {
 
 
         //Filter by rider
-        app.get('/parcels/assigned/rider', verifyFBToken, async (req, res) => {
-            const email = req.query.email;
+        app.get('/parcels/assigned/rider', verifyFBToken, verifyRider, async (req, res) => {
+            const email = req.decoded.email;
 
-            if (email !== req.decoded.email) {
-                return res.status(403).send({ message: "Forbidden access" });
+            try {
+                const parcels = await parcelCollection.find({
+                    assigned_rider_email: email,
+                    delivery_status: {
+                        $in: [
+                            "rider-assigned",
+                            "accepted-by-rider",
+                            "picked-up",
+                            "in-transit"
+                        ]
+                    }
+                })
+                    .sort({ creation_date: -1 })
+                    .toArray();
+
+                res.send(parcels);
+
+            } catch (error) {
+                res.status(500).send({
+                    message: "Failed to fetch rider parcels"
+                });
             }
-
-            const parcels = await parcelCollection.find({
-                assigned_rider_email: email
-            }).toArray();
-
-            res.send(parcels);
         });
 
 
         //Update delivery status
         app.patch('/parcels/update-status/:id', verifyFBToken, verifyRider, async (req, res) => {
             const id = req.params.id;
-            const { status, tracking_id } = req.body;
+
+            const {
+                status,
+                tracking_id,
+                fail_reason
+            } = req.body;
+
             const riderEmail = req.decoded.email;
 
-            const allowedStatuses = ["picked-up", "in-transit", "delivered"];
+            const allowedStatuses = [
+                "picked-up",
+                "in-transit",
+                "delivered",
+                "failed"
+            ];
 
             if (!allowedStatuses.includes(status)) {
                 return res.status(400).send({
@@ -302,23 +326,27 @@ async function run() {
             }
 
             try {
+
                 const parcel = await parcelCollection.findOne({
                     _id: new ObjectId(id)
                 });
 
                 if (!parcel) {
-                    return res.status(404).send({ message: "Parcel not found" });
+                    return res.status(404).send({
+                        message: "Parcel not found"
+                    });
                 }
 
-                // 🔐 Security check
+                // 🔐 SECURITY
                 if (parcel.assigned_rider_email !== riderEmail) {
                     return res.status(403).send({
                         message: "Unauthorized"
                     });
                 }
 
-                // 💰 EARNING LOGIC (FIXED POSITION)
+                // 💰 CREATE EARNING ONLY IF DELIVERED
                 if (status === "delivered") {
+
                     const existing = await earningsCollection.findOne({
                         parcel_id: parcel._id
                     });
@@ -335,37 +363,79 @@ async function run() {
                     }
                 }
 
-                // 📦 Update parcel
+                // ❌ FAILED DELIVERY LOGIC
+                const updateDoc = {
+                    delivery_status: status
+                };
+
+                if (status === "failed") {
+                    updateDoc.failed_at = new Date();
+                    updateDoc.fail_reason = fail_reason || "Customer unavailable";
+                }
+
+                // 📦 UPDATE PARCEL
                 await parcelCollection.updateOne(
                     { _id: new ObjectId(id) },
                     {
-                        $set: {
-                            delivery_status: status
-                        }
+                        $set: updateDoc
                     }
                 );
 
-                // 📍 Tracking
+                // 📍 TRACKING UPDATE
                 await trackingCollection.insertOne({
-                    tracking_id,
+                    tracking_id: tracking_id || parcel.tracking_id,
                     status,
-                    message: `Parcel ${status}`,
+                    message:
+                        status === "failed"
+                            ? `Delivery failed: ${fail_reason}`
+                            : `Parcel ${status}`,
                     location: "On Route",
                     created_at: new Date()
                 });
 
                 res.send({
                     success: true,
-                    message: "Status updated"
+                    message: `Parcel marked as ${status}`
                 });
 
             } catch (error) {
+
+                console.error(error);
+
                 res.status(500).send({
                     message: "Failed to update status"
                 });
             }
         });
 
+
+        // ❌ FAILED PARCELS FOR ADMIN
+
+        app.get(
+            "/parcels/failed",
+            verifyFBToken,
+            verifyAdmin,
+            async (req, res) => {
+
+                try {
+
+                    const failedParcels = await parcelCollection.find({
+                        delivery_status: "failed"
+                    })
+                        .sort({ failed_at: -1 })
+                        .toArray();
+
+                    res.send(failedParcels);
+
+                } catch (error) {
+
+                    res.status(500).send({
+                        message: "Failed to fetch failed parcels"
+                    });
+
+                }
+            }
+        );
 
         // bug hotspot: always keep this dynamic route below
         app.get('/parcels/:id', async (req, res) => {
