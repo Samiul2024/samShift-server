@@ -996,8 +996,105 @@ async function run() {
             }
         });
 
-        // admin analytics
 
+        //admin overview
+        app.get(
+            "/admin/parcel-overview",
+            verifyFBToken,
+            verifyAdmin,
+            async (req, res) => {
+
+                try {
+
+                    // 📦 STATUS COUNTS
+                    const statuses = await parcelCollection.aggregate([
+                        {
+                            $group: {
+                                _id: "$delivery_status",
+                                count: { $sum: 1 }
+                            }
+                        }
+                    ]).toArray();
+
+                    // ❌ FAILED DISTRICTS
+                    const failedDistricts = await parcelCollection.aggregate([
+                        {
+                            $match: {
+                                delivery_status: "failed"
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: "$receiverDistrict",
+                                total: { $sum: 1 }
+                            }
+                        },
+                        {
+                            $sort: { total: -1 }
+                        },
+                        {
+                            $limit: 5
+                        }
+                    ]).toArray();
+
+                    // 🚚 FAILED RIDERS
+                    const failedRiders = await parcelCollection.aggregate([
+                        {
+                            $match: {
+                                delivery_status: "failed"
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: "$assigned_rider_email",
+                                total: { $sum: 1 }
+                            }
+                        },
+                        {
+                            $sort: { total: -1 }
+                        },
+                        {
+                            $limit: 5
+                        }
+                    ]).toArray();
+
+                    // 📍 FAILURE REASONS
+                    const failureReasons = await parcelCollection.aggregate([
+                        {
+                            $match: {
+                                delivery_status: "failed"
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: "$fail_reason",
+                                total: { $sum: 1 }
+                            }
+                        },
+                        {
+                            $sort: { total: -1 }
+                        }
+                    ]).toArray();
+
+                    res.send({
+                        statuses,
+                        failedDistricts,
+                        failedRiders,
+                        failureReasons
+                    });
+
+                } catch (error) {
+
+                    res.status(500).send({
+                        message: "Failed to fetch parcel overview"
+                    });
+
+                }
+            }
+        );
+
+
+        // admin analytics
         app.get("/admin/analytics", verifyFBToken, verifyAdmin, async (req, res) => {
             try {
                 const range = req.query.range || "7d";
