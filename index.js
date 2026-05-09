@@ -1,3 +1,5 @@
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -14,10 +16,26 @@ const port = process.env.PORT || 5000;
 //  MIDDLEWARE
 app.use(cors());
 app.use(express.json());
+app.use(helmet());
+
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100
+});
+
+app.use(limiter);
 
 
 
-const serviceAccount = require("./firebase-admin-key.json");
+const serviceAccount = {
+    type: process.env.FB_TYPE,
+    project_id: process.env.FB_PROJECT_ID,
+    private_key_id: process.env.FB_PRIVATE_KEY_ID,
+    private_key: process.env.FB_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    client_email: process.env.FB_CLIENT_EMAIL,
+    client_id: process.env.FB_CLIENT_ID,
+};
+
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -463,7 +481,7 @@ async function run() {
 
 
         //POST:  CREATE a new  PARCEL (POST)
-        app.post("/parcels", async (req, res) => {
+        app.post("/parcels", verifyFBToken, async (req, res) => {
             const parcel = req.body;
 
             if (!parcel) {
@@ -482,9 +500,20 @@ async function run() {
 
 
         // DELETE: Delete a parcel
-        app.delete("/parcels/:id", async (req, res) => {
+        app.delete("/parcels/:id", verifyFBToken, async (req, res) => {
             try {
                 const id = req.params.id;
+                const parcel = await parcelCollection.findOne({
+                    _id: new ObjectId(id)
+                });
+
+                if (parcel.created_by !== req.decoded.email) {
+                    return res.status(403).send({
+                        message: "Forbidden access"
+                    });
+                }
+
+
 
                 const result = await parcelCollection.deleteOne({
                     _id: new ObjectId(id),
@@ -1214,7 +1243,7 @@ async function run() {
 
         //POST : Record Payment and update parcel status
         // POST : Record Payment + Update Parcel + Add Tracking
-        app.post("/payments", async (req, res) => {
+        app.post("/payments", verifyFBToken, async (req, res) => {
             try {
                 const paymentData = req.body;
 
@@ -1284,7 +1313,7 @@ async function run() {
 
 
 
-        app.post('/create-payment-intent', async (req, res) => {
+        app.post('/create-payment-intent', verifyFBToken, async (req, res) => {
             const amountInCents = req.body.amountInCents
 
             try {
